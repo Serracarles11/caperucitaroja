@@ -1,6 +1,10 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
 
 type Stage = "intro" | "continuation";
 
@@ -12,7 +16,17 @@ export default function Home() {
   const nextSectionRef = useRef<HTMLElement | null>(null);
   const introRef = useRef<HTMLVideoElement | null>(null);
   const continuationRef = useRef<HTMLVideoElement | null>(null);
+  const chapterOverlayRef = useRef<HTMLDivElement | null>(null);
+  const chapterTextRef = useRef<HTMLDivElement | null>(null);
+  const chapterVideoRef = useRef<HTMLVideoElement | null>(null);
+  const videoSectionRef = useRef<HTMLElement | null>(null);
+  const restartBtnIntroRef = useRef<HTMLButtonElement | null>(null);
+  const restartBtnChapterRef = useRef<HTMLButtonElement | null>(null);
   const [stage, setStage] = useState<Stage>("intro");
+  const [chapterDismissed, setChapterDismissed] = useState(false);
+  const [arbustoLleno, setArbustoLleno] = useState(true);
+  const [introVideoEnded, setIntroVideoEnded] = useState(false);
+  const [chapterVideoEnded, setChapterVideoEnded] = useState(false);
   const isSnappingRef = useRef(false);
   const touchStartYRef = useRef<number | null>(null);
 
@@ -24,6 +38,7 @@ export default function Home() {
     }
   }, [stage]);
 
+  // Scroll snap for section 1
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
@@ -77,6 +92,151 @@ export default function Home() {
     };
   }, []);
 
+  // GSAP ScrollTrigger for chapter title overlay
+  useEffect(() => {
+    const overlay = chapterOverlayRef.current;
+    const text = chapterTextRef.current;
+    const section = nextSectionRef.current;
+    if (!overlay || !text || !section) return;
+
+    // Timeline: enter (fade in + scale) → stay → exit (slide right + fade out)
+    // pin is not needed because content is already sticky via CSS
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: section,
+        start: "top top",       // starts when section reaches the top
+        end: "bottom bottom",   // ends at the bottom of the 300vh section
+        scrub: 0.5,
+      },
+    });
+
+    // Phase 1: Fade in overlay + text (0% → 30% of scroll range)
+    tl.fromTo(
+      overlay,
+      { autoAlpha: 0 },
+      { autoAlpha: 1, duration: 0.3, ease: "power2.out" },
+      0
+    );
+    tl.fromTo(
+      text,
+      { autoAlpha: 0, scale: 0.85, y: 30 },
+      { autoAlpha: 1, scale: 1, y: 0, duration: 0.3, ease: "power2.out" },
+      0
+    );
+
+    // Phase 2: Hold (30% → 60%)
+    tl.to(overlay, { autoAlpha: 1, duration: 0.3 });
+    tl.to(text, { autoAlpha: 1, duration: 0.3 }, "<");
+
+    // Phase 3: Exit — text slides right + fades, then overlay fades
+    tl.to(text, {
+      x: 300,
+      autoAlpha: 0,
+      duration: 0.25,
+      ease: "power2.in",
+    });
+    tl.to(overlay, {
+      autoAlpha: 0,
+      duration: 0.15,
+      ease: "power2.in",
+      onComplete: () => {
+        setChapterDismissed(true);
+      },
+    });
+
+    return () => {
+      tl.kill();
+      ScrollTrigger.getAll().forEach((st) => st.kill());
+    };
+  }, []);
+
+  // Animate restart buttons with GSAP when they appear
+  useEffect(() => {
+    const btn = restartBtnIntroRef.current;
+    if (!btn || !introVideoEnded) return;
+
+    // Entrance animation
+    gsap.fromTo(btn, { autoAlpha: 0, scale: 0, rotation: -180 }, {
+      autoAlpha: 1, scale: 1, rotation: 0, duration: 0.6, ease: "back.out(1.7)",
+    });
+    // Looping pulse
+    const pulse = gsap.to(btn, {
+      scale: 1.1, duration: 0.8, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.6,
+    });
+    return () => { pulse.kill(); };
+  }, [introVideoEnded]);
+
+  useEffect(() => {
+    const btn = restartBtnChapterRef.current;
+    if (!btn || !chapterVideoEnded) return;
+
+    gsap.fromTo(btn, { autoAlpha: 0, scale: 0, rotation: -180 }, {
+      autoAlpha: 1, scale: 1, rotation: 0, duration: 0.6, ease: "back.out(1.7)",
+    });
+    const pulse = gsap.to(btn, {
+      scale: 1.1, duration: 0.8, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.6,
+    });
+    return () => { pulse.kill(); };
+  }, [chapterVideoEnded]);
+
+  // Auto-restart videos when their section scrolls into view
+  useEffect(() => {
+    const section1 = sectionRef.current;
+    const section3 = videoSectionRef.current;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+
+          // Section 1 entered view — restart intro video
+          if (entry.target === section1) {
+            setIntroVideoEnded(false);
+            setStage("intro");
+            const video = introRef.current;
+            if (video) {
+              video.currentTime = 0;
+              video.play().catch(() => {});
+            }
+          }
+
+          // Section 3 entered view — restart chapter video
+          if (entry.target === section3) {
+            setChapterVideoEnded(false);
+            const video = chapterVideoRef.current;
+            if (video) {
+              video.currentTime = 0;
+              video.play().catch(() => {});
+            }
+          }
+        });
+      },
+      { threshold: 0.6 }
+    );
+
+    if (section1) observer.observe(section1);
+    if (section3) observer.observe(section3);
+
+    return () => observer.disconnect();
+  }, [chapterDismissed]); // re-run when section3 mounts
+
+  // Scroll to video section and play when chapter title is dismissed
+  useEffect(() => {
+    if (!chapterDismissed) return;
+    // Wait for the section to render
+    requestAnimationFrame(() => {
+      const section = videoSectionRef.current;
+      const video = chapterVideoRef.current;
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth" });
+      }
+      if (video) {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }
+    });
+  }, [chapterDismissed]);
+
   return (
     <main className="bg-black text-white">
       <section
@@ -114,6 +274,7 @@ export default function Home() {
               const video = event.currentTarget;
               video.currentTime = video.duration;
               video.pause();
+              setIntroVideoEnded(true);
             }}
           />
         </div>
@@ -122,14 +283,115 @@ export default function Home() {
             Caperucita Roja
           </h1>
         </div>
+
+        {/* Restart button — intro/continuation video */}
+        {introVideoEnded && (
+          <button
+            ref={restartBtnIntroRef}
+            className="absolute top-6 left-6 z-30 invisible cursor-pointer"
+            onClick={() => {
+              setIntroVideoEnded(false);
+              setStage("intro");
+              const video = introRef.current;
+              if (video) {
+                video.currentTime = 0;
+                video.play().catch(() => {});
+              }
+            }}
+          >
+            <img
+              src="/boton-reinicio.png"
+              alt="Reiniciar video"
+              className="w-20 h-20 md:w-24 md:h-24 drop-shadow-[0_0_16px_rgba(255,255,255,0.6)]"
+            />
+          </button>
+        )}
       </section>
 
+      {/* Section 2 — chapter title animation (scroll-driven) */}
       <section
         ref={nextSectionRef}
-        className="flex min-h-screen items-center justify-center bg-zinc-950"
+        className="relative h-[300vh] bg-black"
       >
-        <p className="text-lg text-zinc-200">Siguiente sección</p>
+        <div className="sticky top-0 h-screen w-full overflow-hidden">
+          {/* Chapter title overlay */}
+          <div
+            ref={chapterOverlayRef}
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center invisible"
+          >
+            {/* Blur backdrop */}
+            <div className="absolute inset-0 backdrop-blur-md bg-black/40" />
+
+            {/* Chapter text */}
+            <div
+              ref={chapterTextRef}
+              className="relative z-10 text-center px-8 invisible"
+            >
+              <p className="text-sm uppercase tracking-[0.3em] text-zinc-400 mb-4">
+                Capítulo 1
+              </p>
+              <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold leading-tight max-w-4xl">
+                Caperucita se dirigía a casa de su abuela
+              </h2>
+            </div>
+          </div>
+        </div>
       </section>
+
+      {/* Section 3 — Chapter 1 video + interactive elements (appears after chapter title) */}
+      {chapterDismissed && (
+        <section ref={videoSectionRef} className="relative h-screen w-full overflow-hidden bg-black">
+          <video
+            ref={chapterVideoRef}
+            className="absolute inset-0 min-h-full min-w-full object-cover"
+            style={{ width: "100%", height: "100%" }}
+            src="/video-capitulo1.mp4"
+            muted
+            playsInline
+            preload="auto"
+            onEnded={(event) => {
+              const video = event.currentTarget;
+              video.currentTime = video.duration;
+              video.pause();
+              setChapterVideoEnded(true);
+            }}
+          />
+
+          {/* Restart button — chapter 1 video */}
+          {chapterVideoEnded && (
+            <button
+              ref={restartBtnChapterRef}
+              className="absolute top-6 left-6 z-30 invisible cursor-pointer"
+              onClick={() => {
+                setChapterVideoEnded(false);
+                const video = chapterVideoRef.current;
+                if (video) {
+                  video.currentTime = 0;
+                  video.play().catch(() => {});
+                }
+              }}
+            >
+              <img
+                src="/boton-reinicio.png"
+                alt="Reiniciar video"
+                className="w-20 h-20 md:w-24 md:h-24 drop-shadow-[0_0_16px_rgba(255,255,255,0.6)]"
+              />
+            </button>
+          )}
+
+          {/* Arbusto interactivo — abajo a la derecha */}
+          <button
+            onClick={() => setArbustoLleno((prev) => !prev)}
+            className="absolute -bottom-36 -right-8 md:-bottom-48 md:-right-12 z-20 cursor-pointer transition-transform duration-200 hover:scale-110 active:scale-95"
+          >
+            <img
+              src={arbustoLleno ? "/arbusto-lleno.png" : "/arbusto-agujero.png"}
+              alt={arbustoLleno ? "Arbusto lleno" : "Arbusto con agujero"}
+              className="w-[30rem] h-[30rem] md:w-[44rem] md:h-[44rem] lg:w-[56rem] lg:h-[56rem] object-contain drop-shadow-lg"
+            />
+          </button>
+        </section>
+      )}
     </main>
   );
 }
