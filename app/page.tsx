@@ -14,19 +14,27 @@ const TOUCH_SWIPE_THRESHOLD = 24;
 export default function Home() {
   const sectionRef = useRef<HTMLElement | null>(null);
   const nextSectionRef = useRef<HTMLElement | null>(null);
+  const chapter2SectionRef = useRef<HTMLElement | null>(null);
   const introRef = useRef<HTMLVideoElement | null>(null);
   const continuationRef = useRef<HTMLVideoElement | null>(null);
   const chapterOverlayRef = useRef<HTMLDivElement | null>(null);
   const chapterTextRef = useRef<HTMLDivElement | null>(null);
+  const chapter2OverlayRef = useRef<HTMLDivElement | null>(null);
+  const chapter2TextRef = useRef<HTMLDivElement | null>(null);
   const chapterVideoRef = useRef<HTMLVideoElement | null>(null);
+  const chapter2VideoRef = useRef<HTMLVideoElement | null>(null);
   const videoSectionRef = useRef<HTMLElement | null>(null);
+  const chapter2VideoSectionRef = useRef<HTMLElement | null>(null);
   const restartBtnIntroRef = useRef<HTMLButtonElement | null>(null);
   const restartBtnChapterRef = useRef<HTMLButtonElement | null>(null);
+  const restartBtnChapter2Ref = useRef<HTMLButtonElement | null>(null);
   const [stage, setStage] = useState<Stage>("intro");
   const [chapterDismissed, setChapterDismissed] = useState(false);
+  const [chapter2Dismissed, setChapter2Dismissed] = useState(false);
   const [arbustoLleno, setArbustoLleno] = useState(true);
   const [introVideoEnded, setIntroVideoEnded] = useState(false);
   const [chapterVideoEnded, setChapterVideoEnded] = useState(false);
+  const [chapter2VideoEnded, setChapter2VideoEnded] = useState(false);
   const isSnappingRef = useRef(false);
   const touchStartYRef = useRef<number | null>(null);
 
@@ -92,7 +100,7 @@ export default function Home() {
     };
   }, []);
 
-  // GSAP ScrollTrigger for chapter title overlay
+  // GSAP ScrollTrigger for chapter 1 title overlay
   useEffect(() => {
     const overlay = chapterOverlayRef.current;
     const text = chapterTextRef.current;
@@ -144,11 +152,60 @@ export default function Home() {
       },
     });
 
-    return () => {
-      tl.kill();
-      ScrollTrigger.getAll().forEach((st) => st.kill());
-    };
+    return () => tl.kill();
   }, []);
+
+  // GSAP ScrollTrigger for chapter 2 title overlay
+  useEffect(() => {
+    if (!chapterDismissed) return;
+
+    const overlay = chapter2OverlayRef.current;
+    const text = chapter2TextRef.current;
+    const section = chapter2SectionRef.current;
+    if (!overlay || !text || !section) return;
+
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: section,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 0.5,
+      },
+    });
+
+    tl.fromTo(
+      overlay,
+      { autoAlpha: 0 },
+      { autoAlpha: 1, duration: 0.3, ease: "power2.out" },
+      0
+    );
+    tl.fromTo(
+      text,
+      { autoAlpha: 0, scale: 0.85, y: 30 },
+      { autoAlpha: 1, scale: 1, y: 0, duration: 0.3, ease: "power2.out" },
+      0
+    );
+
+    tl.to(overlay, { autoAlpha: 1, duration: 0.3 });
+    tl.to(text, { autoAlpha: 1, duration: 0.3 }, "<");
+
+    tl.to(text, {
+      x: 300,
+      autoAlpha: 0,
+      duration: 0.25,
+      ease: "power2.in",
+    });
+    tl.to(overlay, {
+      autoAlpha: 0,
+      duration: 0.15,
+      ease: "power2.in",
+      onComplete: () => {
+        setChapter2Dismissed(true);
+      },
+    });
+
+    return () => tl.kill();
+  }, [chapterDismissed]);
 
   // Animate restart buttons with GSAP when they appear
   useEffect(() => {
@@ -179,10 +236,24 @@ export default function Home() {
     return () => { pulse.kill(); };
   }, [chapterVideoEnded]);
 
+  useEffect(() => {
+    const btn = restartBtnChapter2Ref.current;
+    if (!btn || !chapter2VideoEnded) return;
+
+    gsap.fromTo(btn, { autoAlpha: 0, scale: 0, rotation: -180 }, {
+      autoAlpha: 1, scale: 1, rotation: 0, duration: 0.6, ease: "back.out(1.7)",
+    });
+    const pulse = gsap.to(btn, {
+      scale: 1.1, duration: 0.8, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.6,
+    });
+    return () => { pulse.kill(); };
+  }, [chapter2VideoEnded]);
+
   // Auto-restart videos when their section scrolls into view
   useEffect(() => {
     const section1 = sectionRef.current;
     const section3 = videoSectionRef.current;
+    const section5 = chapter2VideoSectionRef.current;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -209,6 +280,16 @@ export default function Home() {
               video.play().catch(() => {});
             }
           }
+
+          // Section 5 entered view — restart chapter 2 video
+          if (entry.target === section5) {
+            setChapter2VideoEnded(false);
+            const video = chapter2VideoRef.current;
+            if (video) {
+              video.currentTime = 0;
+              video.play().catch(() => {});
+            }
+          }
         });
       },
       { threshold: 0.6 }
@@ -216,9 +297,10 @@ export default function Home() {
 
     if (section1) observer.observe(section1);
     if (section3) observer.observe(section3);
+    if (section5) observer.observe(section5);
 
     return () => observer.disconnect();
-  }, [chapterDismissed]); // re-run when section3 mounts
+  }, [chapterDismissed, chapter2Dismissed]); // re-run when section3/section5 mount
 
   // Scroll to video section and play when chapter title is dismissed
   useEffect(() => {
@@ -236,6 +318,23 @@ export default function Home() {
       }
     });
   }, [chapterDismissed]);
+
+  // Scroll to chapter 2 video section and play when chapter 2 title is dismissed
+  useEffect(() => {
+    if (!chapter2Dismissed) return;
+    requestAnimationFrame(() => {
+      const section = chapter2VideoSectionRef.current;
+      const video = chapter2VideoRef.current;
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth" });
+      }
+      if (video) {
+        setChapter2VideoEnded(false);
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }
+    });
+  }, [chapter2Dismissed]);
 
   return (
     <main className="bg-black text-white">
@@ -390,6 +489,78 @@ export default function Home() {
               className="w-[30rem] h-[30rem] md:w-[44rem] md:h-[44rem] lg:w-[56rem] lg:h-[56rem] object-contain drop-shadow-lg"
             />
           </button>
+        </section>
+      )}
+
+      {/* Section 4 — chapter 2 title animation (scroll-driven) */}
+      {chapterDismissed && (
+        <section
+          ref={chapter2SectionRef}
+          className="relative h-[300vh] bg-black"
+        >
+          <div className="sticky top-0 h-screen w-full overflow-hidden">
+            <div
+              ref={chapter2OverlayRef}
+              className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center invisible"
+            >
+              <div className="absolute inset-0 backdrop-blur-md bg-black/40" />
+
+              <div
+                ref={chapter2TextRef}
+                className="relative z-10 text-center px-8 invisible"
+              >
+                <p className="text-sm uppercase tracking-[0.3em] text-zinc-400 mb-4">
+                  Capítulo 2
+                </p>
+                <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold leading-tight max-w-4xl">
+                  Caperucita llego a casa de su madre
+                </h2>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Section 5 — Chapter 2 video with same effects */}
+      {chapter2Dismissed && (
+        <section ref={chapter2VideoSectionRef} className="relative h-screen w-full overflow-hidden bg-black">
+          <video
+            ref={chapter2VideoRef}
+            className="absolute inset-0 min-h-full min-w-full object-cover"
+            style={{ width: "100%", height: "100%" }}
+            src="/capitulo2.mp4"
+            muted
+            playsInline
+            preload="auto"
+            onEnded={(event) => {
+              const video = event.currentTarget;
+              video.currentTime = video.duration;
+              video.pause();
+              setChapter2VideoEnded(true);
+            }}
+          />
+
+          {/* Restart button — chapter 2 video */}
+          {chapter2VideoEnded && (
+            <button
+              ref={restartBtnChapter2Ref}
+              className="absolute top-6 left-6 z-30 invisible cursor-pointer"
+              onClick={() => {
+                setChapter2VideoEnded(false);
+                const video = chapter2VideoRef.current;
+                if (video) {
+                  video.currentTime = 0;
+                  video.play().catch(() => {});
+                }
+              }}
+            >
+              <img
+                src="/boton-reinicio.png"
+                alt="Reiniciar video"
+                className="w-20 h-20 md:w-24 md:h-24 drop-shadow-[0_0_16px_rgba(255,255,255,0.6)]"
+              />
+            </button>
+          )}
         </section>
       )}
     </main>
