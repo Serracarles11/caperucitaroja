@@ -23,89 +23,22 @@ const CHAPTERS: Chapter[] = [
 
 export default function Home() {
   const sectionRef = useRef<HTMLElement | null>(null);
+  const nextSectionRef = useRef<HTMLElement | null>(null);
   const introRef = useRef<HTMLVideoElement | null>(null);
   const continuationRef = useRef<HTMLVideoElement | null>(null);
-  const titleSectionRefs = useRef<Array<HTMLElement | null>>([]);
-  const titleOverlayRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const titleTextRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const videoSectionRefs = useRef<Array<HTMLElement | null>>([]);
-  const chapterVideoRefs = useRef<Array<HTMLVideoElement | null>>([]);
-  const chapter1AudioRef = useRef<HTMLAudioElement | null>(null);
-  const chapter1NarradorAudioRef = useRef<HTMLAudioElement | null>(null);
-  const chapter2ChimeneaAudioRef = useRef<HTMLAudioElement | null>(null);
-  const chapter2MadreAudioRef = useRef<HTMLAudioElement | null>(null);
-  const chapter2HijaAudioRef = useRef<HTMLAudioElement | null>(null);
-  const chapterTextOverlayRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const chapterOverlayRef = useRef<HTMLDivElement | null>(null);
+  const chapterTextRef = useRef<HTMLDivElement | null>(null);
+  const chapterVideoRef = useRef<HTMLVideoElement | null>(null);
+  const videoSectionRef = useRef<HTMLElement | null>(null);
   const restartBtnIntroRef = useRef<HTMLButtonElement | null>(null);
   const restartBtnChapterRef = useRef<HTMLButtonElement | null>(null);
-  const textAnimationPlayedRef = useRef<boolean[]>(CHAPTERS.map(() => false));
   const [stage, setStage] = useState<Stage>("intro");
+  const [chapterDismissed, setChapterDismissed] = useState(false);
   const [arbustoLleno, setArbustoLleno] = useState(true);
   const [introVideoEnded, setIntroVideoEnded] = useState(false);
-  const [endedChapterIndex, setEndedChapterIndex] = useState<number | null>(null);
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
-  const getChapterSyncedAudios = useCallback((chapterIndex: number) => {
-    if (chapterIndex === 0) {
-      return [chapter1AudioRef.current, chapter1NarradorAudioRef.current].filter(
-        (audio): audio is HTMLAudioElement => audio !== null
-      );
-    }
-    if (chapterIndex === 1) {
-      return [chapter2ChimeneaAudioRef.current, chapter2MadreAudioRef.current].filter(
-        (audio): audio is HTMLAudioElement => audio !== null
-      );
-    }
-    return [];
-  }, []);
-
-  const getChapterManagedAudios = useCallback((chapterIndex: number) => {
-    if (chapterIndex === 1) {
-      return [chapter2ChimeneaAudioRef.current, chapter2MadreAudioRef.current, chapter2HijaAudioRef.current].filter(
-        (audio): audio is HTMLAudioElement => audio !== null
-      );
-    }
-    return getChapterSyncedAudios(chapterIndex);
-  }, [getChapterSyncedAudios]);
-
-  const getAllAudios = useCallback(
-    () =>
-      [
-        chapter1AudioRef.current,
-        chapter1NarradorAudioRef.current,
-        chapter2ChimeneaAudioRef.current,
-        chapter2MadreAudioRef.current,
-        chapter2HijaAudioRef.current,
-      ].filter((audio): audio is HTMLAudioElement => audio !== null),
-    []
-  );
-
-  const unlockAudio = useCallback(() => {
-    if (audioUnlocked) return;
-    setAudioUnlocked(true);
-
-    // Warm up audio elements so browsers allow future programmatic playback.
-    getAllAudios().forEach((audio) => {
-      audio.muted = true;
-      audio.play().catch(() => {}).finally(() => {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.muted = false;
-      });
-    });
-
-    const activeChapterIndex = videoSectionRefs.current.findIndex((section) =>
-      section?.classList.contains("is-active")
-    );
-    if (activeChapterIndex < 0) return;
-    const activeVideo = chapterVideoRefs.current[activeChapterIndex];
-    if (!activeVideo) return;
-
-    getChapterSyncedAudios(activeChapterIndex).forEach((audio) => {
-      audio.currentTime = activeVideo.currentTime;
-      audio.playbackRate = activeVideo.playbackRate;
-      audio.play().catch(() => {});
-    });
-  }, [audioUnlocked, getAllAudios, getChapterSyncedAudios]);
+  const [chapterVideoEnded, setChapterVideoEnded] = useState(false);
+  const isSnappingRef = useRef(false);
+  const touchStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     const continuation = continuationRef.current;
@@ -131,7 +64,7 @@ export default function Home() {
     };
   }, [unlockAudio]);
 
-  // GSAP ScrollTrigger for all chapter title sections (same animation pattern)
+  // GSAP ScrollTrigger for chapter title overlay
   useEffect(() => {
     const timelines: gsap.core.Timeline[] = [];
 
@@ -180,9 +113,62 @@ export default function Home() {
     });
 
     return () => {
-      timelines.forEach((timeline) => timeline.kill());
+      tl.kill();
+      ScrollTrigger.getAll().forEach((st) => st.kill());
     };
   }, []);
+
+  // GSAP ScrollTrigger for chapter 2 title overlay
+  useEffect(() => {
+    if (!chapterDismissed) return;
+
+    const overlay = chapter2OverlayRef.current;
+    const text = chapter2TextRef.current;
+    const section = chapter2SectionRef.current;
+    if (!overlay || !text || !section) return;
+
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: section,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 0.5,
+      },
+    });
+
+    tl.fromTo(
+      overlay,
+      { autoAlpha: 0 },
+      { autoAlpha: 1, duration: 0.3, ease: "power2.out" },
+      0
+    );
+    tl.fromTo(
+      text,
+      { autoAlpha: 0, scale: 0.85, y: 30 },
+      { autoAlpha: 1, scale: 1, y: 0, duration: 0.3, ease: "power2.out" },
+      0
+    );
+
+    tl.to(overlay, { autoAlpha: 1, duration: 0.3 });
+    tl.to(text, { autoAlpha: 1, duration: 0.3 }, "<");
+
+    tl.to(text, {
+      x: 300,
+      autoAlpha: 0,
+      duration: 0.25,
+      ease: "power2.in",
+    });
+    tl.to(overlay, {
+      autoAlpha: 0,
+      duration: 0.15,
+      ease: "power2.in",
+      onComplete: () => {
+        setChapter2Dismissed(true);
+      },
+    });
+
+    return () => tl.kill();
+  }, [chapterDismissed]);
 
   // Animate restart buttons with GSAP when they appear
   useEffect(() => {
@@ -209,11 +195,12 @@ export default function Home() {
       scale: 1.1, duration: 0.8, repeat: -1, yoyo: true, ease: "sine.inOut", delay: 0.6,
     });
     return () => { pulse.kill(); };
-  }, [endedChapterIndex, getChapterManagedAudios, getChapterSyncedAudios]);
+  }, [chapterVideoEnded]);
 
   // Auto-restart intro video when section 1 scrolls into view
   useEffect(() => {
     const section1 = sectionRef.current;
+    const section3 = videoSectionRef.current;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -230,86 +217,43 @@ export default function Home() {
             video.currentTime = 0;
             video.play().catch(() => {});
           }
+
+          // Section 5 entered view — restart chapter 2 video
+          if (entry.target === section5) {
+            setChapter2VideoEnded(false);
+            const video = chapter2VideoRef.current;
+            if (video) {
+              video.currentTime = 0;
+              video.play().catch(() => {});
+            }
+          }
         });
       },
       { threshold: 0.6 }
     );
 
     if (section1) observer.observe(section1);
+    if (section3) observer.observe(section3);
+
     return () => observer.disconnect();
-  }, []);
+  }, [chapterDismissed]); // re-run when section3 mounts
 
   // Auto-play chapter videos when their own section is visible
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const section = entry.target as HTMLElement;
-          section.classList.toggle("is-active", entry.isIntersecting);
-
-          const rawIndex = section.dataset.videoIndex;
-          if (!rawIndex) return;
-          const chapterIndex = Number(rawIndex);
-          if (Number.isNaN(chapterIndex)) return;
-
-          const video = chapterVideoRefs.current[chapterIndex];
-          const syncedAudios = getChapterSyncedAudios(chapterIndex);
-          const managedAudios = getChapterManagedAudios(chapterIndex);
-          if (!entry.isIntersecting) {
-            video?.pause();
-            managedAudios.forEach((audio) => audio.pause());
-            return;
-          }
-
-          if (video) {
-            // Restart chapter every time it becomes the active full-screen section.
-            video.currentTime = 0;
-            video.play().catch(() => {});
-            managedAudios.forEach((audio) => {
-              audio.pause();
-              audio.currentTime = 0;
-            });
-            syncedAudios.forEach((audio) => {
-              audio.pause();
-              audio.currentTime = 0;
-              audio.muted = false;
-              audio.playbackRate = video.playbackRate;
-              audio.play().catch(() => {});
-            });
-          } else {
-            managedAudios.forEach((audio) => {
-              audio.pause();
-              audio.currentTime = 0;
-            });
-            syncedAudios.forEach((audio) => {
-              audio.play().catch(() => {});
-            });
-          }
-          // Keep the restart button for the chapter that just ended.
-          // Only clear it when user navigates to a different chapter.
-          setEndedChapterIndex((prev) => (prev !== null && prev !== chapterIndex ? null : prev));
-
-          const text = chapterTextOverlayRefs.current[chapterIndex];
-          if (text && !textAnimationPlayedRef.current[chapterIndex]) {
-            gsap.fromTo(
-              text,
-              { autoAlpha: 0, y: -14 },
-              { autoAlpha: 1, y: 0, duration: 0.35, ease: "power2.out" }
-            );
-            textAnimationPlayedRef.current[chapterIndex] = true;
-          }
-
-        });
-      },
-      { threshold: 0.5 }
-    );
-
-    videoSectionRefs.current.forEach((section) => {
-      if (section) observer.observe(section);
+    if (!chapterDismissed) return;
+    // Wait for the section to render
+    requestAnimationFrame(() => {
+      const section = videoSectionRef.current;
+      const video = chapterVideoRef.current;
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth" });
+      }
+      if (video) {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }
     });
-
-    return () => observer.disconnect();
-  }, [endedChapterIndex, getChapterManagedAudios, getChapterSyncedAudios]);
+  }, [chapterDismissed]);
 
   return (
     <main className="bg-black text-white">
@@ -524,65 +468,19 @@ export default function Home() {
                   </button>
                 )}
 
-                {chapter.id === 1 && (
-                  <button
-                    onClick={() => setArbustoLleno((prev) => !prev)}
-                    className="absolute -bottom-24 -right-6 z-20 cursor-pointer transition-transform duration-200 hover:scale-110 active:scale-95 sm:-bottom-28 sm:-right-8 md:-bottom-32 md:-right-10 lg:-bottom-40 lg:-right-12 xl:-bottom-48 xl:-right-14"
-                  >
-                    <img
-                      src={arbustoLleno ? "/arbusto-lleno.png" : "/arbusto-agujero.png"}
-                      alt={arbustoLleno ? "Arbusto lleno" : "Arbusto con agujero"}
-                      className="h-[18rem] w-[18rem] object-contain drop-shadow-lg sm:h-[24rem] sm:w-[24rem] md:h-[30rem] md:w-[30rem] lg:h-[38rem] lg:w-[38rem] xl:h-[48rem] xl:w-[48rem]"
-                    />
-                  </button>
-                )}
-              </div>
-            </section>
-          </Fragment>
-        );
-      })}
-
-      <audio
-        ref={chapter1AudioRef}
-        src="/sonido-bosque.mp3"
-        preload="auto"
-        aria-hidden="true"
-      />
-      <audio
-        ref={chapter1NarradorAudioRef}
-        src="/audios/narrador-cap1.mp3"
-        preload="auto"
-        aria-hidden="true"
-      />
-      <audio
-        ref={chapter2ChimeneaAudioRef}
-        src="/audios/sonido-chimenea.mp3"
-        preload="auto"
-        aria-hidden="true"
-      />
-      <audio
-        ref={chapter2MadreAudioRef}
-        src="/audios/madre-cap2.mp3"
-        preload="auto"
-        onEnded={() => {
-          const video = chapterVideoRefs.current[1];
-          const chapter2Section = videoSectionRefs.current[1];
-          const hija = chapter2HijaAudioRef.current;
-          if (!video || !chapter2Section || !hija) return;
-          if (video.paused || !chapter2Section.classList.contains("is-active")) return;
-          hija.pause();
-          hija.currentTime = 0;
-          hija.playbackRate = video.playbackRate;
-          hija.play().catch(() => {});
-        }}
-        aria-hidden="true"
-      />
-      <audio
-        ref={chapter2HijaAudioRef}
-        src="/audios/hija-cap2.mp3"
-        preload="auto"
-        aria-hidden="true"
-      />
+          {/* Arbusto interactivo — abajo a la derecha */}
+          <button
+            onClick={() => setArbustoLleno((prev) => !prev)}
+            className="absolute -bottom-36 -right-8 md:-bottom-48 md:-right-12 z-20 cursor-pointer transition-transform duration-200 hover:scale-110 active:scale-95"
+          >
+            <img
+              src={arbustoLleno ? "/arbusto-lleno.png" : "/arbusto-agujero.png"}
+              alt={arbustoLleno ? "Arbusto lleno" : "Arbusto con agujero"}
+              className="w-[30rem] h-[30rem] md:w-[44rem] md:h-[44rem] lg:w-[56rem] lg:h-[56rem] object-contain drop-shadow-lg"
+            />
+          </button>
+        </section>
+      )}
     </main>
   );
 }
