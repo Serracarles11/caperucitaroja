@@ -36,10 +36,8 @@ export default function Home() {
   const videoSectionRefs = useRef<Array<HTMLElement | null>>([]);
   const chapterVideoRefs = useRef<Array<HTMLVideoElement | null>>([]);
   const chapter1AudioRef = useRef<HTMLAudioElement | null>(null);
-  const chapter1NarradorAudioRef = useRef<HTMLAudioElement | null>(null);
   const chapter2ChimeneaAudioRef = useRef<HTMLAudioElement | null>(null);
-  const chapter2MadreAudioRef = useRef<HTMLAudioElement | null>(null);
-  const chapter2HijaAudioRef = useRef<HTMLAudioElement | null>(null);
+  const chapter4Bosque2AudioRef = useRef<HTMLAudioElement | null>(null);
   const chapter2MadreLlevarRef = useRef<HTMLVideoElement | null>(null);
   const restartBtnIntroRef = useRef<HTMLButtonElement | null>(null);
   const restartBtnChapterRef = useRef<HTMLButtonElement | null>(null);
@@ -325,35 +323,41 @@ export default function Home() {
 
   const getChapterSyncedAudios = useCallback((chapterIndex: number) => {
     if (chapterIndex === 0) {
-      return [chapter1AudioRef.current, chapter1NarradorAudioRef.current].filter(
+      return [chapter1AudioRef.current].filter(
         (audio): audio is HTMLAudioElement => audio !== null
       );
     }
-    if (chapterIndex === 1) {
-      return [chapter2ChimeneaAudioRef.current, chapter2MadreAudioRef.current].filter(
+    if (chapterIndex === 2) {
+      return [chapter1AudioRef.current].filter(
+        (audio): audio is HTMLAudioElement => audio !== null
+      );
+    }
+    if (chapterIndex === 4) {
+      return [chapter1AudioRef.current].filter(
+        (audio): audio is HTMLAudioElement => audio !== null
+      );
+    }
+    if (chapterIndex === 3) {
+      return [chapter4Bosque2AudioRef.current].filter(
+        (audio): audio is HTMLAudioElement => audio !== null
+      );
+    }
+    if (chapterIndex === 1 || chapterIndex === 5 || chapterIndex === 6 || chapterIndex === 7) {
+      return [chapter2ChimeneaAudioRef.current].filter(
         (audio): audio is HTMLAudioElement => audio !== null
       );
     }
     return [];
   }, []);
 
-  const getChapterManagedAudios = useCallback((chapterIndex: number) => {
-    if (chapterIndex === 1) {
-      return [chapter2ChimeneaAudioRef.current, chapter2MadreAudioRef.current, chapter2HijaAudioRef.current].filter(
-        (audio): audio is HTMLAudioElement => audio !== null
-      );
-    }
-    return getChapterSyncedAudios(chapterIndex);
-  }, [getChapterSyncedAudios]);
+  const getChapterManagedAudios = useCallback((chapterIndex: number) => getChapterSyncedAudios(chapterIndex), [getChapterSyncedAudios]);
 
   const getAllAudios = useCallback(
     () =>
       [
         chapter1AudioRef.current,
-        chapter1NarradorAudioRef.current,
         chapter2ChimeneaAudioRef.current,
-        chapter2MadreAudioRef.current,
-        chapter2HijaAudioRef.current,
+        chapter4Bosque2AudioRef.current,
       ].filter((audio): audio is HTMLAudioElement => audio !== null),
     []
   );
@@ -609,15 +613,6 @@ export default function Home() {
 
   return (
     <main className="bg-black text-white">
-      {!audioUnlocked && (
-        <button
-          onClick={unlockAudio}
-          className="fixed right-4 top-4 z-40 rounded-full bg-black/70 px-4 py-2 text-sm font-semibold text-amber-100 ring-1 ring-amber-200/40 backdrop-blur hover:bg-black/85"
-        >
-          Activar sonido
-        </button>
-      )}
-
       <section
         ref={sectionRef}
         className="story-snap-section screen-h relative w-full overflow-hidden"
@@ -657,12 +652,6 @@ export default function Home() {
             }}
           />
         </div>
-        <div className="pointer-events-none relative z-10 flex h-full w-full items-end p-6 sm:p-8 md:p-12 lg:p-16 xl:p-20">
-          <h1 className="max-w-[14ch] text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl">
-            Caperucita Roja
-          </h1>
-        </div>
-
         {introVideoEnded && (
           <button
             ref={restartBtnIntroRef}
@@ -886,6 +875,14 @@ export default function Home() {
                   />
                 )}
 
+                {chapter.id === 6 && (
+                  <img
+                    src="/ultimocap.png"
+                    alt="Ultimo capitulo"
+                    className="pointer-events-none absolute left-[68%] bottom-[68%] z-20 w-[28vw] max-w-[18rem] min-w-[8rem] -translate-x-1/2 object-contain sm:w-[24vw] md:w-[20vw] lg:w-[16vw]"
+                  />
+                )}
+
                 {chapter.id === 8 && (
                   <>
                     <img
@@ -970,37 +967,14 @@ export default function Home() {
         aria-hidden="true"
       />
       <audio
-        ref={chapter1NarradorAudioRef}
-        src="/audios/narrador-cap1.mp3"
-        preload="auto"
-        aria-hidden="true"
-      />
-      <audio
         ref={chapter2ChimeneaAudioRef}
         src="/audios/sonido-chimenea.mp3"
         preload="auto"
         aria-hidden="true"
       />
       <audio
-        ref={chapter2MadreAudioRef}
-        src="/audios/madre-cap2.mp3"
-        preload="auto"
-        onEnded={() => {
-          const video = chapterVideoRefs.current[1];
-          const chapter2Section = videoSectionRefs.current[1];
-          const hija = chapter2HijaAudioRef.current;
-          if (!video || !chapter2Section || !hija) return;
-          if (video.paused || !chapter2Section.classList.contains("is-active")) return;
-          hija.pause();
-          hija.currentTime = 0;
-          hija.playbackRate = video.playbackRate;
-          hija.play().catch(() => {});
-        }}
-        aria-hidden="true"
-      />
-      <audio
-        ref={chapter2HijaAudioRef}
-        src="/audios/hija-cap2.mp3"
+        ref={chapter4Bosque2AudioRef}
+        src="/bosque2.mp3"
         preload="auto"
         aria-hidden="true"
       />
