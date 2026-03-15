@@ -352,6 +352,20 @@ export default function Home() {
 
   const getChapterManagedAudios = useCallback((chapterIndex: number) => getChapterSyncedAudios(chapterIndex), [getChapterSyncedAudios]);
 
+  const resetChapterSyncedAudios = useCallback(
+    (chapterIndex: number, video?: HTMLVideoElement) => {
+      getChapterSyncedAudios(chapterIndex).forEach((audio) => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.muted = false;
+        if (video) {
+          audio.playbackRate = video.playbackRate;
+        }
+      });
+    },
+    [getChapterSyncedAudios]
+  );
+
   const getAllAudios = useCallback(
     () =>
       [
@@ -369,7 +383,7 @@ export default function Home() {
 
       getChapterSyncedAudios(chapterIndex).forEach((audio) => {
         const drift = Math.abs(audio.currentTime - video.currentTime);
-        if (drift > 0.2) {
+        if (audio.paused || drift > 0.2) {
           audio.currentTime = video.currentTime;
         }
         audio.muted = false;
@@ -553,7 +567,6 @@ export default function Home() {
 
           const video = chapterVideoRefs.current[chapterIndex];
           const chapter2MadreLlevar = chapter2MadreLlevarRef.current;
-          const syncedAudios = getChapterSyncedAudios(chapterIndex);
           const managedAudios = getChapterManagedAudios(chapterIndex);
           if (!entry.isIntersecting) {
             video?.pause();
@@ -573,14 +586,7 @@ export default function Home() {
               audio.pause();
               audio.currentTime = 0;
             });
-            syncedAudios.forEach((audio) => {
-              audio.pause();
-              audio.currentTime = 0;
-              audio.muted = false;
-              audio.playbackRate = video.playbackRate;
-              audio.play().catch(() => {});
-            });
-            syncAndResumeChapterAudios(chapterIndex, video);
+            resetChapterSyncedAudios(chapterIndex, video);
             if (chapterIndex === 1 && chapter2MadreLlevar) {
               chapter2MadreLlevar.pause();
               chapter2MadreLlevar.currentTime = 0;
@@ -591,9 +597,7 @@ export default function Home() {
               audio.pause();
               audio.currentTime = 0;
             });
-            syncedAudios.forEach((audio) => {
-              audio.play().catch(() => {});
-            });
+            resetChapterSyncedAudios(chapterIndex);
           }
           // Keep the restart button for the chapter that just ended.
           // Only clear it when user navigates to a different chapter.
@@ -609,7 +613,7 @@ export default function Home() {
     });
 
     return () => observer.disconnect();
-  }, [endedChapterIndex, getChapterManagedAudios, getChapterSyncedAudios, syncAndResumeChapterAudios]);
+  }, [endedChapterIndex, getChapterManagedAudios, resetChapterSyncedAudios]);
 
   return (
     <main className="bg-black text-white">
@@ -735,7 +739,7 @@ export default function Home() {
                     muted
                     playsInline
                     preload="auto"
-                    onPlay={(event) => {
+                    onPlaying={(event) => {
                       const video = event.currentTarget;
                       syncAndResumeChapterAudios(chapterIndex, video);
                     }}
@@ -927,11 +931,7 @@ export default function Home() {
                         audio.pause();
                         audio.currentTime = 0;
                       });
-                      getChapterSyncedAudios(chapterIndex).forEach((audio) => {
-                        audio.muted = false;
-                        audio.playbackRate = video.playbackRate;
-                        audio.play().catch(() => {});
-                      });
+                      resetChapterSyncedAudios(chapterIndex, video);
                     }}
                   >
                     <img
